@@ -20,8 +20,10 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.database.ds.model.DataStructureTableColumnModel;
 import org.eclipse.dirigible.database.ds.model.DataStructureTableModel;
+import org.eclipse.dirigible.database.ds.model.IDataStructureModel;
 import org.eclipse.dirigible.database.sql.DataType;
 import org.eclipse.dirigible.database.sql.DataTypeUtils;
 import org.eclipse.dirigible.database.sql.ISqlKeywords;
@@ -47,11 +49,12 @@ public class TableAlterProcessor {
 	 * @throws SQLException the SQL exception
 	 */
 	public static void execute(Connection connection, DataStructureTableModel tableModel) throws SQLException {
-		logger.info("Processing Alter Table: " + tableModel.getName());
-		
+		boolean caseSensitive = Boolean.parseBoolean(Configuration.get(IDataStructureModel.DIRIGIBLE_DATABASE_NAMES_CASE_SENSITIVE, "false"));
 		String tableName = tableModel.getName();
-		
-//		ISqlDialect nativeDialect = SqlFactory.deriveDialect(connection);
+		if (caseSensitive) {
+			tableName = "\"" + tableName + "\"";
+		}
+		logger.info("Processing Alter Table: " + tableName);
 		
 		Map<String, String> columnDefinitions = new HashMap<String, String>();
 		DatabaseMetaData dmd = connection.getMetaData();
@@ -66,8 +69,10 @@ public class TableAlterProcessor {
 		
 		// ADD iteration
 		for (DataStructureTableColumnModel columnModel : tableModel.getColumns()) {
-
 			String name = columnModel.getName();
+			if (caseSensitive) {
+				name = "\"" + name + "\"";
+			}
 			DataType type = DataType.valueOf(columnModel.getType());
 			String length = columnModel.getLength();
 			boolean isNullable = columnModel.isNullable();
@@ -101,7 +106,7 @@ public class TableAlterProcessor {
 
 			if (!columnDefinitions.containsKey(name.toUpperCase())) {
 				
-				AlterTableBuilder alterTableBuilder = SqlFactory.getNative(connection).alter().table(tableModel.getName());
+				AlterTableBuilder alterTableBuilder = SqlFactory.getNative(connection).alter().table(tableName);
 				
 				alterTableBuilder.add().column(name, type, isPrimaryKey, isNullable, isUnique, args);
 
@@ -123,7 +128,10 @@ public class TableAlterProcessor {
 		
 		for (String columnName : columnDefinitions.keySet()) {
 			if (!modelColumnNames.contains(columnName.toUpperCase())) {
-				AlterTableBuilder alterTableBuilder = SqlFactory.getNative(connection).alter().table(tableModel.getName());
+				AlterTableBuilder alterTableBuilder = SqlFactory.getNative(connection).alter().table(tableName);
+				if (caseSensitive) {
+					columnName = "\"" + columnName + "\"";
+				}
 				alterTableBuilder.drop().column(columnName, DataType.BOOLEAN);
 				executeAlterBuilder(connection, alterTableBuilder);
 			}
